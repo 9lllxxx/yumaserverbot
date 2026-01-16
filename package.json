@@ -1,0 +1,19 @@
+{
+  "name": "discord-verification-bot",
+  "version": "1.0.0",
+  "description": "Discord verification + role panel + VIP message counter bot",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3"
+  },
+  "engines": {
+    "node": "20.x"
+  },
+  "author": "",
+  "license": "ISC"
+}
