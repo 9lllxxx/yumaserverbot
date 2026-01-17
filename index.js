@@ -57,7 +57,6 @@ const vipLevels = [
   { name: 'VIP12', messages: 40000 }
 ];
 
-// スラッシュコマンドは verify と rolepanel のみ（vip確認はプレフィックスに変更）
 const commands = [
   new SlashCommandBuilder()
     .setName('verify')
@@ -202,9 +201,18 @@ client.on('messageCreate', async message => {
   if (message.content.trim() === '!vip確認') {
     const uid = message.author.id;
     const user = userData[uid] || { count: 0, level: 0 };
-    const currentLevelIndex = user.level;
-    const currentLevel = vipLevels[currentLevelIndex].name;
     const currentMessages = user.count;
+    let currentLevelIndex = 0;
+
+    // 現在のメッセージ数から正しいVIPレベルを計算（到達している最高レベル）
+    for (let i = vipLevels.length - 1; i >= 0; i--) {
+      if (currentMessages >= vipLevels[i].messages) {
+        currentLevelIndex = i;
+        break;
+      }
+    }
+
+    const currentLevel = vipLevels[currentLevelIndex].name;
 
     let nextLevelName = '最高ランクです！';
     let nextNeeded = 0;
@@ -216,12 +224,12 @@ client.on('messageCreate', async message => {
     const embed = new EmbedBuilder()
       .setColor(0x5865F2)
       .setTitle(`${message.author.username} さんのVIPレベルです！`)
-      .setDescription(`現在 **${currentLevel}**！\n次のVIP **${nextLevelName}** まであと **${nextNeeded}** メッセージです！\n\nVIP申請はこちら→ https://discord.com/channels/634719150434156546/1266966291651231888`)
+      .setDescription(`現在 **${currentLevel}**！\n総メッセージ数: **${currentMessages}** 件\n次のVIP **${nextLevelName}** まであと **${nextNeeded}** メッセージです！\n\nVIP申請はこちら→ https://discord.com/channels/634719150434156546/1266966291651231888`)
       .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
       .setTimestamp();
 
     await message.reply({ embeds: [embed] }).catch(console.error);
-    return; // 他の処理をスキップ
+    return;
   }
 
   // 通常のメッセージカウント処理
