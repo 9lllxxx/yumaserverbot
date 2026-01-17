@@ -28,6 +28,7 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
 const DATA_FILE = path.join(__dirname, 'userData.json');
+const WELCOME_CHANNEL_ID = '1230699162786598923';
 
 let userData = {};
 try {
@@ -70,16 +71,51 @@ const commands = [
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 client.once('ready', async () => {
-  console.log(`Logged in: ${client.user.tag}`);
+  console.log(`Logged in: ${client.user.tag} (${client.user.id})`);
+  console.log('Guild ID used for registration:', GUILD_ID);
   try {
-    await rest.put(
+    const data = await rest.put(
       Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
       { body: commands }
     );
-    console.log('Guild commands registered');
+    console.log(`Guild commands registered: ${data.length} commands`);
   } catch (error) {
     console.error('Command register error:', error);
   }
+});
+
+client.on('guildMemberAdd', async member => {
+  if (!member.guild) return;
+  const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
+  if (!channel) return;
+
+  const now = new Date();
+  const dateStr = `${now.getFullYear()} ${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+
+  const embed = new EmbedBuilder()
+    .setColor(0x00FF00)
+    .setTitle('ようこそ！')
+    .setDescription(`<@${member.id}> さんがサーバーに参加しました。\n\n※改造の質問はhttps://discord.com/channels/634719150434156546/1069167712556830760で行ってください！`)
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
+    .setFooter({ text: `参加日時: ${dateStr}` })
+    .setTimestamp();
+
+  await channel.send({ embeds: [embed] }).catch(console.error);
+});
+
+client.on('guildMemberRemove', async member => {
+  if (!member.guild) return;
+  const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
+  if (!channel) return;
+
+  const embed = new EmbedBuilder()
+    .setColor(0xFF0000)
+    .setTitle('さようなら...')
+    .setDescription(`<@${member.id}> さんがサーバーから退出しました。`)
+    .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
+    .setTimestamp();
+
+  await channel.send({ embeds: [embed] }).catch(console.error);
 });
 
 client.on('interactionCreate', async interaction => {
