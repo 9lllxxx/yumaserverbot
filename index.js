@@ -197,14 +197,18 @@ client.on('interactionCreate', async interaction => {
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
 
-  // !vip確認 コマンド処理
+  // !vip確認 コマンド処理（1回だけ返信）
   if (message.content.trim() === '!vip確認') {
     const uid = message.author.id;
-    const user = userData[uid] || { count: 0, level: 0 };
-    const currentMessages = user.count;
+    if (!userData[uid]) {
+      userData[uid] = { count: 0, level: 0 };
+      await fs.writeFile(DATA_FILE, JSON.stringify(userData, null, 2)).catch(console.error);
+    }
+
+    const currentMessages = userData[uid].count;
     let currentLevelIndex = 0;
 
-    // 現在のメッセージ数から正しいVIPレベルを計算（到達している最高レベル）
+    // メッセージ数から到達している最高レベルを計算
     for (let i = vipLevels.length - 1; i >= 0; i--) {
       if (currentMessages >= vipLevels[i].messages) {
         currentLevelIndex = i;
@@ -228,11 +232,12 @@ client.on('messageCreate', async message => {
       .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
       .setTimestamp();
 
-    await message.reply({ embeds: [embed] }).catch(console.error);
+    // メンションなしで返信（リプライはするが@は切る）
+    await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } }).catch(console.error);
     return;
   }
 
-  // 通常のメッセージカウント処理
+  // 通常のメッセージカウント処理（自動返信なし）
   const uid = message.author.id;
   if (!userData[uid]) userData[uid] = { count: 0, level: 0 };
 
