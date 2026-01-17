@@ -197,18 +197,34 @@ client.on('interactionCreate', async interaction => {
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
 
-  // !vip確認 コマンド処理（1回だけ返信）
-  if (message.content.trim() === '!vip確認') {
-    const uid = message.author.id;
-    if (!userData[uid]) {
-      userData[uid] = { count: 0, level: 0 };
-      await fs.writeFile(DATA_FILE, JSON.stringify(userData, null, 2)).catch(console.error);
-    }
+  const uid = message.author.id;
+  if (!userData[uid]) userData[uid] = { count: 0, level: 0 };
 
+  userData[uid].count += 1;
+  const current = userData[uid].count;
+  let levelIndex = 0; // 毎回メッセージ数からレベルを再計算
+
+  for (let i = vipLevels.length - 1; i >= 0; i--) {
+    if (current >= vipLevels[i].messages) {
+      levelIndex = i;
+      break;
+    }
+  }
+
+  if (levelIndex > userData[uid].level) {
+    userData[uid].level = levelIndex;
+    const roleName = vipLevels[levelIndex].name;
+    const role = message.guild.roles.cache.find(r => r.name === roleName);
+    if (role) await message.member.roles.add(role).catch(console.error);
+  }
+
+  await fs.writeFile(DATA_FILE, JSON.stringify(userData, null, 2)).catch(console.error);
+
+  // !vip確認 コマンド処理
+  if (message.content.trim() === '!vip確認') {
     const currentMessages = userData[uid].count;
     let currentLevelIndex = 0;
 
-    // メッセージ数から到達している最高レベルを計算
     for (let i = vipLevels.length - 1; i >= 0; i--) {
       if (currentMessages >= vipLevels[i].messages) {
         currentLevelIndex = i;
@@ -232,31 +248,9 @@ client.on('messageCreate', async message => {
       .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
       .setTimestamp();
 
-    // メンションなしで返信（リプライはするが@は切る）
     await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } }).catch(console.error);
     return;
   }
-
-  // 通常のメッセージカウント処理（自動返信なし）
-  const uid = message.author.id;
-  if (!userData[uid]) userData[uid] = { count: 0, level: 0 };
-
-  userData[uid].count += 1;
-  const current = userData[uid].count;
-  let levelIndex = userData[uid].level;
-
-  while (levelIndex < vipLevels.length - 1 && current >= vipLevels[levelIndex + 1].messages) {
-    levelIndex++;
-  }
-
-  if (levelIndex > userData[uid].level) {
-    userData[uid].level = levelIndex;
-    const roleName = vipLevels[levelIndex].name;
-    const role = message.guild.roles.cache.find(r => r.name === roleName);
-    if (role) await message.member.roles.add(role).catch(console.error);
-  }
-
-  await fs.writeFile(DATA_FILE, JSON.stringify(userData, null, 2)).catch(console.error);
 });
 
 client.login(TOKEN).catch(err => {
