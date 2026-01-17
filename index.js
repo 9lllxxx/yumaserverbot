@@ -57,6 +57,7 @@ const vipLevels = [
   { name: 'VIP12', messages: 40000 }
 ];
 
+// スラッシュコマンドは verify と rolepanel のみ（vip確認はプレフィックスに変更）
 const commands = [
   new SlashCommandBuilder()
     .setName('verify')
@@ -71,8 +72,7 @@ const commands = [
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 client.once('ready', async () => {
-  console.log(`Logged in: ${client.user.tag} (${client.user.id})`);
-  console.log('Guild ID used for registration:', GUILD_ID);
+  console.log(`Logged in: ${client.user.tag}`);
   try {
     const data = await rest.put(
       Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
@@ -198,6 +198,33 @@ client.on('interactionCreate', async interaction => {
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
 
+  // !vip確認 コマンド処理
+  if (message.content.trim() === '!vip確認') {
+    const uid = message.author.id;
+    const user = userData[uid] || { count: 0, level: 0 };
+    const currentLevelIndex = user.level;
+    const currentLevel = vipLevels[currentLevelIndex].name;
+    const currentMessages = user.count;
+
+    let nextLevelName = '最高ランクです！';
+    let nextNeeded = 0;
+    if (currentLevelIndex < vipLevels.length - 1) {
+      nextLevelName = vipLevels[currentLevelIndex + 1].name;
+      nextNeeded = vipLevels[currentLevelIndex + 1].messages - currentMessages;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(0x5865F2)
+      .setTitle(`${message.author.username} さんのVIPレベルです！`)
+      .setDescription(`現在 **${currentLevel}**！\n次のVIP **${nextLevelName}** まであと **${nextNeeded}** メッセージです！\n\nVIP申請はこちら→ https://discord.com/channels/634719150434156546/1266966291651231888`)
+      .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
+      .setTimestamp();
+
+    await message.reply({ embeds: [embed] }).catch(console.error);
+    return; // 他の処理をスキップ
+  }
+
+  // 通常のメッセージカウント処理
   const uid = message.author.id;
   if (!userData[uid]) userData[uid] = { count: 0, level: 0 };
 
@@ -217,14 +244,6 @@ client.on('messageCreate', async message => {
   }
 
   await fs.writeFile(DATA_FILE, JSON.stringify(userData, null, 2)).catch(console.error);
-
-  if (Math.random() < 0.08) {
-    const next = levelIndex < vipLevels.length - 1 ? vipLevels[levelIndex + 1].messages - current : 0;
-    message.reply({
-      content: `現在: **${vipLevels[levelIndex].name}**\n${next > 0 ? `次まで: ${next}メッセージ` : '最高ランク'}`,
-      allowedMentions: { repliedUser: false }
-    }).catch(() => {});
-  }
 });
 
 client.login(TOKEN).catch(err => {
