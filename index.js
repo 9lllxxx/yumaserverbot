@@ -21,7 +21,7 @@ const GUILD_ID = process.env.GUILD_ID;
 
 
 // =============================
-// ⭐ VIP ロールID対応表
+// ⭐ VIP ロールID
 // =============================
 const vipRoleIds = {
   'VIP1': '651371929915097104',
@@ -63,19 +63,18 @@ const vipLevels = [
 
 
 // =============================
-// ⭐ APIから発言数取得
+// ⭐ API発言数取得
 // =============================
 async function fetchMessageCount(userId) {
-  const url = `https://discord.com/api/v9/guilds/${GUILD_ID}/messages/search?author_id=${userId}`;
-
   try {
-    const res = await fetch(url, {
-      headers: { Authorization: `Bot ${TOKEN}` }
-    });
+    const res = await fetch(
+      `https://discord.com/api/v9/guilds/${GUILD_ID}/messages/search?author_id=${userId}`,
+      { headers: { Authorization: `Bot ${TOKEN}` } }
+    );
 
-    const data = await res.json();
     if (!res.ok) return null;
 
+    const data = await res.json();
     return data.total_results ?? 0;
   } catch {
     return null;
@@ -93,8 +92,16 @@ client.on('messageCreate', async message => {
   const uid = message.author.id;
 
   const currentMessages = await fetchMessageCount(uid);
-  if (currentMessages === null) return;
 
+  if (currentMessages === null) {
+    await message.reply({
+      content: '⚠ 発言数を取得できませんでした。時間をおいて再実行してください。',
+      allowedMentions: { repliedUser: false }
+    });
+    return;
+  }
+
+  // 到達ランク計算
   let currentLevelIndex = 0;
   for (let i = vipLevels.length - 1; i >= 0; i--) {
     if (currentMessages >= vipLevels[i].messages) {
@@ -121,20 +128,37 @@ client.on('messageCreate', async message => {
     .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
     .setTimestamp();
 
-  const roleId = vipRoleIds[currentLevel];
-  const role = roleId ? message.guild.roles.cache.get(roleId) : null;
-
   let components = [];
 
-  // 持ってなければ昇格ボタン
-  if (role && !message.member.roles.cache.has(role.id)) {
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`vip_promote_${uid}_${role.id}`)
-        .setLabel('昇格')
-        .setStyle(ButtonStyle.Success)
-    );
-    components = [row];
+  const targetVip = vipLevels[currentLevelIndex];
+  const requiredMessages = targetVip.messages;
+  const roleId = vipRoleIds[targetVip.name];
+  const role = message.guild.roles.cache.get(roleId);
+
+  // =============================
+  // ⭐ 最強の安全確認
+  // =============================
+  if (currentMessages >= requiredMessages && role) {
+
+    // 今持っている最高VIP
+    let userHighestIndex = -1;
+    vipLevels.forEach((vip, index) => {
+      const rid = vipRoleIds[vip.name];
+      if (message.member.roles.cache.has(rid)) {
+        if (index > userHighestIndex) userHighestIndex = index;
+      }
+    });
+
+    // 今より上なら表示
+    if (currentLevelIndex > userHighestIndex) {
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`vip_promote_${uid}_${role.id}`)
+          .setLabel('昇格')
+          .setStyle(ButtonStyle.Success)
+      );
+      components = [row];
+    }
   }
 
   await message.reply({
@@ -146,7 +170,7 @@ client.on('messageCreate', async message => {
 
 
 // =============================
-// ⭐ 昇格ボタン
+// ⭐ 昇格処理
 // =============================
 client.on('interactionCreate', async interaction => {
   if (!interaction.isButton()) return;
@@ -154,7 +178,6 @@ client.on('interactionCreate', async interaction => {
 
   const [, , userId, roleId] = interaction.customId.split('_');
 
-  // 本人以外禁止
   if (interaction.user.id !== userId) {
     await interaction.reply({ content: 'あなたはこのボタンを押せません', ephemeral: true });
     return;
@@ -168,19 +191,14 @@ client.on('interactionCreate', async interaction => {
 
   const member = interaction.member;
 
-  // =============================
-  // ⭐ 既存VIPを全部外す
-  // =============================
-  const vipRoleIdList = Object.values(vipRoleIds);
-  for (const rid of vipRoleIdList) {
+  // 既存VIP削除
+  for (const rid of Object.values(vipRoleIds)) {
     if (member.roles.cache.has(rid)) {
       await member.roles.remove(rid).catch(() => {});
     }
   }
 
-  // =============================
-  // ⭐ 新VIP付与
-  // =============================
+  // 新VIP付与
   await member.roles.add(newRole).catch(() => {});
 
   await interaction.reply({
