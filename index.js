@@ -83,6 +83,34 @@ client.once('ready', async () => {
   }
 });
 
+
+// =============================
+// ⭐ メッセージ検索APIで発言数取得
+// =============================
+async function fetchMessageCount(userId) {
+  const url = `https://discord.com/api/v9/guilds/${GUILD_ID}/messages/search?author_id=${userId}`;
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bot ${TOKEN}`
+      }
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.error("API error:", data);
+      return null;
+    }
+
+    return data.total_results ?? 0;
+  } catch (err) {
+    console.error("Fetch error:", err);
+    return null;
+  }
+}
+
 client.on('guildMemberAdd', async member => {
   if (!member.guild) return;
   const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
@@ -201,28 +229,21 @@ client.on('messageCreate', async message => {
   if (!userData[uid]) userData[uid] = { count: 0, level: 0 };
 
   userData[uid].count += 1;
-  const current = userData[uid].count;
-  let levelIndex = 0; // 毎回メッセージ数からレベルを再計算
-
-  for (let i = vipLevels.length - 1; i >= 0; i--) {
-    if (current >= vipLevels[i].messages) {
-      levelIndex = i;
-      break;
-    }
-  }
-
-  if (levelIndex > userData[uid].level) {
-    userData[uid].level = levelIndex;
-    const roleName = vipLevels[levelIndex].name;
-    const role = message.guild.roles.cache.find(r => r.name === roleName);
-    if (role) await message.member.roles.add(role).catch(console.error);
-  }
 
   await fs.writeFile(DATA_FILE, JSON.stringify(userData, null, 2)).catch(console.error);
 
-  // !vip確認 コマンド処理
+  // =============================
+  // ⭐ API版 VIP確認
+  // =============================
   if (message.content.trim() === '!vip確認') {
-    const currentMessages = userData[uid].count;
+
+    const currentMessages = await fetchMessageCount(uid);
+
+    if (currentMessages === null) {
+      await message.reply("発言数の取得に失敗しました").catch(console.error);
+      return;
+    }
+
     let currentLevelIndex = 0;
 
     for (let i = vipLevels.length - 1; i >= 0; i--) {
