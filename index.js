@@ -1,18 +1,11 @@
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder } from 'discord.js';
+import { Client, GatewayIntentBits } from 'discord.js';
 import {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
-  RoleSelectMenuBuilder,
-  PermissionFlagsBits
+  ButtonStyle
 } from 'discord.js';
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import http from 'http';
 
 const client = new Client({
   intents: [
@@ -24,19 +17,30 @@ const client = new Client({
 });
 
 const TOKEN = process.env.DISCORD_TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-const DATA_FILE = path.join(__dirname, 'userData.json');
-const WELCOME_CHANNEL_ID = '1230699162786598923';
 
-let userData = {};
-try {
-  const data = await fs.readFile(DATA_FILE, 'utf8');
-  userData = JSON.parse(data);
-} catch (err) {
-  if (err.code !== 'ENOENT') console.error(err);
-}
+// =============================
+// ⭐ VIP ロールID対応表
+// =============================
+const vipRoleIds = {
+  'VIP1': '651371929915097104',
+  'VIP2': '947879607061839872',
+  'VIP2.5': '1310963415136862289',
+  'VIP3': '1062277593925169232',
+  'VIP3.5': '1310963759539556435',
+  'VIP4': '948562538965114880',
+  'VIP4.5': '1310963883007017091',
+  'VIP5': '1074642101939212378',
+  'VIP5.5': '1310964505337004063',
+  'VIP6': '947878777659203646',
+  'VIP7': '1066336299209994240',
+  'VIP8': '950330398653685770',
+  'VIP9': '1057570022148554772',
+  'VIP10': '1027168795518849034',
+  'VIP11': '1400298348568772781',
+  'VIP12': '1400302120871133235'
+};
 
 const vipLevels = [
   { name: 'VIP1', messages: 500 },
@@ -57,229 +61,139 @@ const vipLevels = [
   { name: 'VIP12', messages: 40000 }
 ];
 
-const commands = [
-  new SlashCommandBuilder()
-    .setName('verify')
-    .setDescription('認証パネルを作成')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-  new SlashCommandBuilder()
-    .setName('rolepanel')
-    .setDescription('ロールパネルを作成（最大17個）')
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-].map(cmd => cmd.toJSON());
-
-const rest = new REST({ version: '10' }).setToken(TOKEN);
-
-client.once('ready', async () => {
-  console.log(`Logged in: ${client.user.tag}`);
-  try {
-    const data = await rest.put(
-      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-      { body: commands }
-    );
-    console.log(`Guild commands registered: ${data.length} commands`);
-  } catch (error) {
-    console.error('Command register error:', error);
-  }
-});
-
 
 // =============================
-// ⭐ メッセージ検索APIで発言数取得
+// ⭐ APIから発言数取得
 // =============================
 async function fetchMessageCount(userId) {
   const url = `https://discord.com/api/v9/guilds/${GUILD_ID}/messages/search?author_id=${userId}`;
 
   try {
     const res = await fetch(url, {
-      headers: {
-        Authorization: `Bot ${TOKEN}`
-      }
+      headers: { Authorization: `Bot ${TOKEN}` }
     });
 
     const data = await res.json();
-
-    if (!res.ok) {
-      console.error("API error:", data);
-      return null;
-    }
+    if (!res.ok) return null;
 
     return data.total_results ?? 0;
-  } catch (err) {
-    console.error("Fetch error:", err);
+  } catch {
     return null;
   }
 }
 
-client.on('guildMemberAdd', async member => {
-  if (!member.guild) return;
-  const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
-  if (!channel) return;
 
-  const now = new Date();
-  const dateStr = `${now.getFullYear()} ${now.getMonth() + 1}/${now.getDate()} ${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
-
-  const embed = new EmbedBuilder()
-    .setColor(0x00FF00)
-    .setTitle('ようこそ！')
-    .setDescription(`<@${member.id}> さんがサーバーに参加しました。\n\n※改造の質問はhttps://discord.com/channels/634719150434156546/1069167712556830760で行ってください！`)
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
-    .setFooter({ text: `参加日時: ${dateStr}` })
-    .setTimestamp();
-
-  await channel.send({ embeds: [embed] }).catch(console.error);
-});
-
-client.on('guildMemberRemove', async member => {
-  if (!member.guild) return;
-  const channel = member.guild.channels.cache.get(WELCOME_CHANNEL_ID);
-  if (!channel) return;
-
-  const embed = new EmbedBuilder()
-    .setColor(0xFF0000)
-    .setTitle('さようなら...')
-    .setDescription(`<@${member.id}> さんがサーバーから退出しました。`)
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 512 }))
-    .setTimestamp();
-
-  await channel.send({ embeds: [embed] }).catch(console.error);
-});
-
-client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isRoleSelectMenu()) return;
-
-  try {
-    if (interaction.isChatInputCommand()) {
-      if (interaction.commandName === 'verify') {
-        const row = new ActionRowBuilder().addComponents(
-          new RoleSelectMenuBuilder()
-            .setCustomId('verify_role_select')
-            .setPlaceholder('ロールを選択')
-            .setMinValues(1)
-            .setMaxValues(1)
-        );
-        await interaction.reply({ content: 'ロールを選択', components: [row], ephemeral: true });
-      }
-
-      if (interaction.commandName === 'rolepanel') {
-        const row = new ActionRowBuilder().addComponents(
-          new RoleSelectMenuBuilder()
-            .setCustomId('role_panel_select')
-            .setPlaceholder('最大17個')
-            .setMinValues(1)
-            .setMaxValues(17)
-        );
-        await interaction.reply({ content: 'ロールを選択', components: [row], ephemeral: true });
-      }
-    }
-
-    if (interaction.isRoleSelectMenu()) {
-      if (interaction.customId === 'verify_role_select') {
-        const roleId = interaction.values[0];
-        const embed = new EmbedBuilder().setTitle('認証パネル').setDescription('ボタンを押して認証').setColor(0x00FF00);
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId(`verify_btn_${roleId}`).setLabel('認証').setStyle(ButtonStyle.Success)
-        );
-        await interaction.update({ content: '作成しました', components: [] });
-        await interaction.channel.send({ embeds: [embed], components: [row] });
-      }
-
-      if (interaction.customId === 'role_panel_select') {
-        const roles = interaction.values;
-        const embed = new EmbedBuilder().setTitle('ロールパネル').setDescription('ボタンを押して取得').setColor(0x5865F2);
-        const rows = [];
-        let current = new ActionRowBuilder();
-        for (const id of roles) {
-          if (current.components.length === 5) {
-            rows.push(current);
-            current = new ActionRowBuilder();
-          }
-          current.addComponents(
-            new ButtonBuilder().setCustomId(`role_btn_${id}`).setLabel(`<@&${id}>`).setStyle(ButtonStyle.Secondary)
-          );
-        }
-        if (current.components.length) rows.push(current);
-        await interaction.update({ content: '作成しました', components: [] });
-        await interaction.channel.send({ embeds: [embed], components: rows });
-      }
-    }
-
-    if (interaction.isButton()) {
-      if (interaction.customId.startsWith('verify_btn_')) {
-        const roleId = interaction.customId.replace('verify_btn_', '');
-        await interaction.member.roles.add(roleId);
-        await interaction.reply({ content: '認証完了', ephemeral: true });
-      }
-      if (interaction.customId.startsWith('role_btn_')) {
-        const roleId = interaction.customId.replace('role_btn_', '');
-        await interaction.member.roles.add(roleId);
-        await interaction.reply({ content: 'ロール付与完了', ephemeral: true });
-      }
-    }
-  } catch (error) {
-    console.error('Interaction error:', error);
-    if (!interaction.replied) await interaction.reply({ content: 'エラー', ephemeral: true }).catch(() => {});
-  }
-});
-
+// =============================
+// ⭐ !vip確認
+// =============================
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
+  if (message.content.trim() !== '!vip確認') return;
 
   const uid = message.author.id;
-  if (!userData[uid]) userData[uid] = { count: 0, level: 0 };
 
-  userData[uid].count += 1;
+  const currentMessages = await fetchMessageCount(uid);
+  if (currentMessages === null) return;
 
-  await fs.writeFile(DATA_FILE, JSON.stringify(userData, null, 2)).catch(console.error);
-
-  // =============================
-  // ⭐ API版 VIP確認
-  // =============================
-  if (message.content.trim() === '!vip確認') {
-
-    const currentMessages = await fetchMessageCount(uid);
-
-    if (currentMessages === null) {
-      await message.reply("発言数の取得に失敗しました").catch(console.error);
-      return;
+  let currentLevelIndex = 0;
+  for (let i = vipLevels.length - 1; i >= 0; i--) {
+    if (currentMessages >= vipLevels[i].messages) {
+      currentLevelIndex = i;
+      break;
     }
+  }
 
-    let currentLevelIndex = 0;
+  const currentLevel = vipLevels[currentLevelIndex].name;
 
-    for (let i = vipLevels.length - 1; i >= 0; i--) {
-      if (currentMessages >= vipLevels[i].messages) {
-        currentLevelIndex = i;
-        break;
-      }
-    }
+  let nextLevelName = '最高ランクです！';
+  let nextNeeded = 0;
+  if (currentLevelIndex < vipLevels.length - 1) {
+    nextLevelName = vipLevels[currentLevelIndex + 1].name;
+    nextNeeded = vipLevels[currentLevelIndex + 1].messages - currentMessages;
+  }
 
-    const currentLevel = vipLevels[currentLevelIndex].name;
+  const embed = new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle(`${message.author.username} さんのVIPレベルです！`)
+    .setDescription(
+      `現在 **${currentLevel}**！\n総メッセージ数: **${currentMessages}** 件\n次のVIP **${nextLevelName}** まであと **${nextNeeded}** メッセージです！`
+    )
+    .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
+    .setTimestamp();
 
-    let nextLevelName = '最高ランクです！';
-    let nextNeeded = 0;
-    if (currentLevelIndex < vipLevels.length - 1) {
-      nextLevelName = vipLevels[currentLevelIndex + 1].name;
-      nextNeeded = vipLevels[currentLevelIndex + 1].messages - currentMessages;
-    }
+  const roleId = vipRoleIds[currentLevel];
+  const role = roleId ? message.guild.roles.cache.get(roleId) : null;
 
-    const embed = new EmbedBuilder()
-      .setColor(0x5865F2)
-      .setTitle(`${message.author.username} さんのVIPレベルです！`)
-      .setDescription(`現在 **${currentLevel}**！\n総メッセージ数: **${currentMessages}** 件\n次のVIP **${nextLevelName}** まであと **${nextNeeded}** メッセージです！\n\nVIP申請はこちら→ https://discord.com/channels/634719150434156546/1266966291651231888`)
-      .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
-      .setTimestamp();
+  let components = [];
 
-    await message.reply({ embeds: [embed], allowedMentions: { repliedUser: false } }).catch(console.error);
+  // 持ってなければ昇格ボタン
+  if (role && !message.member.roles.cache.has(role.id)) {
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`vip_promote_${uid}_${role.id}`)
+        .setLabel('昇格')
+        .setStyle(ButtonStyle.Success)
+    );
+    components = [row];
+  }
+
+  await message.reply({
+    embeds: [embed],
+    components,
+    allowedMentions: { repliedUser: false }
+  });
+});
+
+
+// =============================
+// ⭐ 昇格ボタン
+// =============================
+client.on('interactionCreate', async interaction => {
+  if (!interaction.isButton()) return;
+  if (!interaction.customId.startsWith('vip_promote_')) return;
+
+  const [, , userId, roleId] = interaction.customId.split('_');
+
+  // 本人以外禁止
+  if (interaction.user.id !== userId) {
+    await interaction.reply({ content: 'あなたはこのボタンを押せません', ephemeral: true });
     return;
   }
+
+  const newRole = interaction.guild.roles.cache.get(roleId);
+  if (!newRole) {
+    await interaction.reply({ content: 'ロールが見つかりません', ephemeral: true });
+    return;
+  }
+
+  const member = interaction.member;
+
+  // =============================
+  // ⭐ 既存VIPを全部外す
+  // =============================
+  const vipRoleIdList = Object.values(vipRoleIds);
+  for (const rid of vipRoleIdList) {
+    if (member.roles.cache.has(rid)) {
+      await member.roles.remove(rid).catch(() => {});
+    }
+  }
+
+  // =============================
+  // ⭐ 新VIP付与
+  // =============================
+  await member.roles.add(newRole).catch(() => {});
+
+  await interaction.reply({
+    content: `🎉 ${newRole.name} に昇格しました！`,
+    ephemeral: true
+  });
 });
 
-client.login(TOKEN).catch(err => {
-  console.error('Login failed:', err);
-  process.exit(1);
-});
 
-import http from 'http';
+client.login(TOKEN);
+
+
+// 生存確認
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('Alive');
