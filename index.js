@@ -20,9 +20,6 @@ const TOKEN = process.env.DISCORD_TOKEN;
 const GUILD_ID = process.env.GUILD_ID;
 
 
-// =============================
-// ⭐ VIP ロールID
-// =============================
 const vipRoleIds = {
   'VIP1': '651371929915097104',
   'VIP2': '947879607061839872',
@@ -62,9 +59,6 @@ const vipLevels = [
 ];
 
 
-// =============================
-// ⭐ API発言数取得
-// =============================
 async function fetchMessageCount(userId) {
   try {
     const res = await fetch(
@@ -82,9 +76,6 @@ async function fetchMessageCount(userId) {
 }
 
 
-// =============================
-// ⭐ !vip確認
-// =============================
 client.on('messageCreate', async message => {
   if (message.author.bot || !message.guild) return;
   if (message.content.trim() !== '!vip確認') return;
@@ -101,7 +92,6 @@ client.on('messageCreate', async message => {
     return;
   }
 
-  // 到達ランク計算
   let currentLevelIndex = 0;
   for (let i = vipLevels.length - 1; i >= 0; i--) {
     if (currentMessages >= vipLevels[i].messages) {
@@ -135,12 +125,9 @@ client.on('messageCreate', async message => {
   const roleId = vipRoleIds[targetVip.name];
   const role = message.guild.roles.cache.get(roleId);
 
-  // =============================
-  // ⭐ 最強の安全確認
-  // =============================
+
   if (currentMessages >= requiredMessages && role) {
 
-    // 今持っている最高VIP
     let userHighestIndex = -1;
     vipLevels.forEach((vip, index) => {
       const rid = vipRoleIds[vip.name];
@@ -149,7 +136,7 @@ client.on('messageCreate', async message => {
       }
     });
 
-    // 今より上なら表示
+
     if (currentLevelIndex > userHighestIndex) {
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -169,9 +156,6 @@ client.on('messageCreate', async message => {
 });
 
 
-// =============================
-// ⭐ 昇格処理
-// =============================
 client.on('interactionCreate', async interaction => {
   if (!interaction.isButton()) return;
   if (!interaction.customId.startsWith('vip_promote_')) return;
@@ -191,14 +175,12 @@ client.on('interactionCreate', async interaction => {
 
   const member = interaction.member;
 
-  // 既存VIP削除
   for (const rid of Object.values(vipRoleIds)) {
     if (member.roles.cache.has(rid)) {
       await member.roles.remove(rid).catch(() => {});
     }
   }
 
-  // 新VIP付与
   await member.roles.add(newRole).catch(() => {});
 
   await interaction.reply({
@@ -211,7 +193,6 @@ client.on('interactionCreate', async interaction => {
 client.login(TOKEN);
 
 
-// 生存確認
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('Alive');
